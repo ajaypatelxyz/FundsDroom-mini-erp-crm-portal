@@ -52,7 +52,10 @@ const initializeDB = async () => {
       const userCount = await User.countDocuments();
 
       if (userCount === 0) {
-        console.log("[Server] No users found - auto-seeding demo data...");
+        console.log(
+          "[Server] No users found - auto-seeding demo data..."
+        );
+
         await seedDatabase();
       }
 
@@ -69,7 +72,10 @@ module.exports = async (req, res) => {
     await initializeDB();
     return app(req, res);
   } catch (error) {
-    console.error("[Server] Database initialization failed:", error);
+    console.error(
+      "[Server] Database initialization failed:",
+      error
+    );
 
     return res.status(500).json({
       status: "error",
