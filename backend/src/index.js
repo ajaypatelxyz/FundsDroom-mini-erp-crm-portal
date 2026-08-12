@@ -1,7 +1,5 @@
 require("dotenv").config();
 
-console.log("MONGODB_URI loaded:", !!process.env.MONGODB_URI);
-
 const express = require("express");
 const cors = require("cors");
 
@@ -23,14 +21,15 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
-// Routes
+// Health check
 app.get("/api/health", (req, res) => {
-  res.json({
+  res.status(200).json({
     status: "ok",
     time: new Date().toISOString()
   });
 });
 
+// Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/products", productRoutes);
@@ -41,35 +40,62 @@ app.use("/api/dashboard", dashboardRoutes);
 // Global error handler
 app.use(errorHandler);
 
-// Database connection
-let dbConnected = false;
+// Database initialization
+let dbPromise = null;
 
 const initializeDB = async () => {
-  if (dbConnected) return;
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      await connectDB();
 
-  await connectDB();
+      const User = require("./models/User");
+      const userCount = await User.countDocuments();
 
-  const User = require("./models/User");
-  const userCount = await User.countDocuments();
+      if (userCount === 0) {
+        console.log("[Server] No users found - auto-seeding demo data...");
+        await seedDatabase();
+      }
 
-  if (userCount === 0) {
-    console.log("[Server] No users found — auto-seeding demo data...");
-    await seedDatabase();
+      console.log("[Server] Database initialized successfully.");
+    })();
   }
 
-  dbConnected = true;
+  return dbPromise;
 };
 
-// Vercel handler
+// Vercel / Node serverless handler
 module.exports = async (req, res) => {
-  await initializeDB();
-  return app(req, res);
+  try {
+    await initializeDB();
+    return app(req, res);
+  } catch (error) {
+    console.error("[Server] Database initialization failed:", error);
+
+    return res.status(500).json({
+      status: "error",
+      message: "Database connection failed",
+      error:
+        process.env.NODE_ENV === "production"
+          ? "Internal server error"
+          : error.message
+    });
+  }
 };
 
+// Local development
 if (require.main === module) {
-  initializeDB().then(() => {
-    app.listen(process.env.PORT || 5000, () => {
-      console.log(`🚀 Backend running at http://localhost:${process.env.PORT || 5000}`);
+  initializeDB()
+    .then(() => {
+      const PORT = process.env.PORT || 5000;
+
+      app.listen(PORT, () => {
+        console.log(
+          `🚀 Backend running at http://localhost:${PORT}`
+        );
+      });
+    })
+    .catch((error) => {
+      console.error("Failed to start server:", error);
+      process.exit(1);
     });
-  });
 }
